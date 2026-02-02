@@ -102,6 +102,7 @@ impl WsManager {
         // Spawn a task to handle outgoing commands
         // let ws_clone = ws.clone();
         // wasm_bindgen_futures::spawn_local(async move {
+        tracing::debug!("Entering while loop");
         while let Some(cmd) = rx_cmd.recv().await {
             tracing::debug!("Processing WebSocket command: {:?}", cmd);
             match cmd {
