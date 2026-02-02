@@ -33,12 +33,12 @@ pub struct WsManager {
 #[cfg(target_arch = "wasm32")]
 impl WsManager {
     /// Create a new websocket manager and connect to the given URL
-    pub(crate) fn new(
-        url: &str,
+    pub(crate) async fn new(
+        url: String,
         tx_msg: mpsc::UnboundedSender<WsResult<WsMessage>>,
         mut rx_cmd: mpsc::UnboundedReceiver<WsCommand>,
     ) -> WsResult<Self> {
-        let ws = WebSocket::new(url).map_err(|e| {
+        let ws = WebSocket::new(&url).map_err(|e| {
             WsError::ConnectionError(format!("Failed to create WebSocket: {:?}", e))
         })?;
 
@@ -89,28 +89,28 @@ impl WsManager {
         ws.set_onopen(Some(on_open_closure.as_ref().unchecked_ref()));
 
         // Spawn a task to handle outgoing commands
-        let ws_clone = ws.clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            while let Some(cmd) = rx_cmd.recv().await {
-                match cmd {
-                    WsCommand::Send(msg) => {
-                        let result = match msg {
-                            WsMessage::Text(text) => ws_clone.send_with_str(&text),
-                            WsMessage::Binary(data) => ws_clone.send_with_u8_array(&data),
-                        };
+        // let ws_clone = ws.clone();
+        // wasm_bindgen_futures::spawn_local(async move {
+        while let Some(cmd) = rx_cmd.recv().await {
+            match cmd {
+                WsCommand::Send(msg) => {
+                    let result = match msg {
+                        WsMessage::Text(text) => ws.send_with_str(&text),
+                        WsMessage::Binary(data) => ws.send_with_u8_array(&data),
+                    };
 
-                        if let Err(e) = result {
-                            // Could send error back through channel if needed
-                            web_sys::console::error_1(&format!("Send error: {:?}", e).into());
-                        }
-                    }
-                    WsCommand::Close => {
-                        let _ = ws_clone.close();
-                        break;
+                    if let Err(e) = result {
+                        // Could send error back through channel if needed
+                        web_sys::console::error_1(&format!("Send error: {:?}", e).into());
                     }
                 }
+                WsCommand::Close => {
+                    let _ = ws.close();
+                    break;
+                }
             }
-        });
+        }
+        // });
 
         Ok(Self {
             ws,

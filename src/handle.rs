@@ -68,12 +68,12 @@ impl WsHandle {
 
         // Create the WsManager which spawns a task to handle commands
         // The manager stays alive through the spawned task that owns rx_cmd
-        let _manager = WsManager::new(url, tx_msg, rx_cmd)?;
+        let url_clone = url.to_string();
+        let _manager = wasm_bindgen_futures::spawn_local(async move {
+            let _ = WsManager::new(url_clone, tx_msg, rx_cmd).await;
+        });
 
-        Ok(Self {
-            rx_msg,
-            tx_cmd,
-        })
+        Ok(Self { rx_msg, tx_cmd })
     }
 
     /// Manually close the websocket connection
