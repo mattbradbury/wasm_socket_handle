@@ -1,0 +1,30 @@
+[package]
+name = "wasm_socket_handle"
+version = "0.1.0"
+edition = "2021"
+authors = ["Matt Bradbury"]
+description = "A Rust library using tokio to remotely control a web-sys websocket from a WsHandle that implements Sink and Stream"
+license = "MIT"
+repository = "https://github.com/mattbradbury/wasm_socket_handle"
+keywords = ["wasm", "websocket", "tokio", "async", "web-sys"]
+categories = ["wasm", "asynchronous", "web-programming::websocket"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1.35", features = ["sync", "macros", "rt"] }
+futures = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent", "BinaryType"] }
+js-sys = "0.3"
+thiserror = "1.0"
+pin-project-lite = "0.2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+wasm-logger = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
