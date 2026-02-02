@@ -10,10 +10,12 @@ A Rust library using tokio to remotely control a web-sys websocket from a WsHand
 
 - **Sink/Stream Traits**: Use familiar `futures` traits for sending and receiving messages
 - **Send + Sync**: WsHandle is safe to share across async tasks
+- **Clone**: WsHandle can be cloned to use in multiple tasks simultaneously
 - **Tokio Integration**: Built on tokio channels for efficient async communication
 - **Type-Safe Messages**: Strong typing for text and binary WebSocket messages
 - **Error Handling**: Comprehensive error types for all WebSocket operations
 - **WASM-First**: Designed specifically for WebAssembly targets using web-sys
+- **No Unsafe Code**: Pure safe Rust implementation
 
 ## Installation
 
@@ -85,6 +87,28 @@ while let Some(msg) = ws.next().await {
 }
 ```
 
+### Cloning and Sharing
+
+WsHandle can be cloned to use in multiple tasks:
+
+```rust
+use futures::{SinkExt, StreamExt};
+
+// Clone the handle for concurrent operations
+let mut ws_receiver = ws.clone();
+let mut ws_sender = ws.clone();
+
+// Spawn a task for receiving
+wasm_bindgen_futures::spawn_local(async move {
+    while let Some(Ok(msg)) = ws_receiver.next().await {
+        println!("Received: {:?}", msg);
+    }
+});
+
+// Send from another task
+ws_sender.send(WsMessage::text("hello")).await.unwrap();
+```
+
 ### Message Types
 
 Messages are represented by the `WsMessage` enum:
@@ -126,15 +150,18 @@ match ws.send(msg).await {
 
 ## Architecture
 
-The library uses a channel-based architecture:
+The library uses a channel-based architecture with safe concurrency:
 
 1. **WsHandle**: The user-facing handle that implements Sink and Stream
+   - Cloneable and shareable across tasks
+   - Receiver wrapped in `Arc<Mutex<>>` for safe sharing
+   - No unsafe code required
 2. **WsManager**: Internal manager that interfaces with web-sys WebSocket
 3. **Channels**: Tokio channels for communication between handle and manager
    - Command channel (unbounded): Handle → Manager for sending messages
    - Message channel (unbounded): Manager → Handle for receiving messages
 
-This design allows the handle to be Send + Sync while the actual WebSocket operations happen in the WASM event loop.
+This design allows the handle to be Send + Sync + Clone while the actual WebSocket operations happen in the WASM event loop.
 
 ## Requirements
 
