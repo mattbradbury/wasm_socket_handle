@@ -33,7 +33,7 @@ pub struct WsManager {
 #[cfg(target_arch = "wasm32")]
 impl WsManager {
     /// Create a new websocket manager and connect to the given URL
-    pub fn new(
+    pub(crate) fn new(
         url: &str,
         tx_msg: mpsc::UnboundedSender<WsResult<WsMessage>>,
         mut rx_cmd: mpsc::UnboundedReceiver<WsCommand>,
@@ -96,9 +96,7 @@ impl WsManager {
                     WsCommand::Send(msg) => {
                         let result = match msg {
                             WsMessage::Text(text) => ws_clone.send_with_str(&text),
-                            WsMessage::Binary(data) => {
-                                ws_clone.send_with_u8_array(&data)
-                            }
+                            WsMessage::Binary(data) => ws_clone.send_with_u8_array(&data),
                         };
 
                         if let Err(e) = result {
@@ -134,7 +132,7 @@ impl WsManager {
 #[cfg(target_arch = "wasm32")]
 impl Drop for WsManager {
     fn drop(&mut self) {
-        let _ = self.ws.close();
+        // let _ = self.ws.close();
     }
 }
 
