@@ -37,7 +37,7 @@ async fn run_example() {
     let ws_url = "ws://localhost:8080/socket";
     console::log_1(&format!("Connecting to {}...", ws_url).into());
 
-    let mut ws = match WsHandle::new(ws_url) {
+    let mut ws = match WsHandle::new(ws_url).await {
         Ok(ws) => ws,
         Err(e) => {
             console::error_1(&format!("Failed to connect: {}", e).into());

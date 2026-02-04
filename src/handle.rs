@@ -39,6 +39,8 @@ pin_project! {
     ///     }
     /// }
     /// ```
+
+    #[derive(Debug)]
     pub struct WsHandle {
         #[pin]
         rx_msg: mpsc::UnboundedReceiver<WsResult<WsMessage>>,
