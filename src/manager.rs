@@ -29,8 +29,8 @@ pub(crate) enum WsCommand {
 #[cfg(target_arch = "wasm32")]
 pub struct WsManager {
     ws: WebSocket,
-    rx_cmd: mpsc::UnboundedReceiver<WsCommand>,
-    tx_msg: mpsc::UnboundedSender<WsResult<WsMessage>>,
+    // rx_cmd: mpsc::UnboundedReceiver<WsCommand>,
+    // tx_msg: mpsc::UnboundedSender<WsResult<WsMessage>>,
     _on_message_closure: Closure<dyn FnMut(MessageEvent)>,
     _on_error_closure: Closure<dyn FnMut(ErrorEvent)>,
     _on_close_closure: Closure<dyn FnMut(CloseEvent)>,
@@ -48,6 +48,8 @@ impl WsManager {
     ) {
         // tracing::info!("Top of WsManager.  is_ready: {:?}", &is_ready);
 
+        use tokio::select;
+
         let rt = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
@@ -59,10 +61,11 @@ impl WsManager {
             tracing::error!("Failed to create WebSocket: {:?}", e);
             WsError::ConnectionError(format!("Failed to create WebSocket: {:?}", e))
         });
+
         let ws = match ws {
             Ok(ws) => ws,
             Err(e) => {
-                _ = is_ready.clone().send(Err(e)).unwrap();
+                _ = is_ready.send(Err(e)).unwrap();
                 return;
             }
         };
@@ -131,60 +134,85 @@ impl WsManager {
 
         tracing::info!("is_ready {:?}", &is_ready);
 
-        if let Err(e) = rx_open.changed().await.map_err(|_| {
-            let res = rx_open.borrow();
-            tracing::trace!("rx_open contents {:?}", dbg!(&res));
+        // this shouldn't crash, just be a gatekeeper
+        rx_open
+            .changed()
+            .await
+            .expect("rx_open.change() failed in wasm_socket_handle::manager.rs");
+        let value = rx_open.borrow();
 
-            WsError::ConnectionError("WebSocket open channel closed unexpectedly".to_string())
-        }) {
-            is_ready.send(Err(e)).ok();
-            return;
-        } else {
-            let res = is_ready.send(Ok(()));
-            tracing::trace!("{:?}", dbg!(&res));
-            res.expect("Tried to say is_ready()");
+        let change = value
+            .as_ref()
+            .expect("rx_open should have Some value after change")
+            .clone();
+
+        drop(value);
+
+        match change {
+            Ok(_) => {
+                is_ready.send(Ok(())).ok();
+            }
+            Err(e) => {
+                is_ready.send(Err(e.clone())).ok();
+                return;
+            }
+        };
+
+        tracing::debug!("Entering while loop");
+
+        enum SelectResult {
+            WsCommand(Option<WsCommand>),
+            WatchChanged,
         }
 
-        // let mut this = Self {
-        //     ws,
-        //     _on_message_closure: on_message_closure,
-        //     _on_error_closure: on_error_closure,
-        //     _on_close_closure: on_close_closure,
-        //     rx_cmd,
-        //     tx_msg,
-        // };
+        loop {
+            let select = select! {
+                cmd = rx_cmd.recv() => { SelectResult::WsCommand(cmd) }
+                    _ = rx_open.changed() => { SelectResult::WatchChanged }
+            };
 
-        // Spawn a task to handle outgoing commands
-        // let ws_clone = ws.clone();
-        // wasm_bindgen_futures::spawn_local(async move { this.run().await });
-        //     this.run().await
-        // }
-
-        // pub async fn run(&mut self) {
-        tracing::debug!("Entering while loop");
-        while let Some(cmd) = rx_cmd.recv().await {
-            tracing::debug!("Processing WebSocket command: {:?}", cmd);
-            match cmd {
-                WsCommand::Send(msg) => {
-                    tracing::debug!("Sending message to WebSocket");
-                    let result = match msg {
-                        WsMessage::Text(text) => ws.send_with_str(&text),
-                        WsMessage::Binary(data) => ws.send_with_u8_array(&data),
-                    };
-
-                    if let Err(e) = result {
-                        tracing::error!("Failed to send message to WebSocket: {:?}", e);
-                        // Could send error back through channel if needed
-                        web_sys::console::error_1(&format!("Send error: {:?}", e).into());
-                    }
-                }
-                WsCommand::Close => {
-                    tracing::info!("Closing WebSocket connection");
-                    let _ = ws.close();
+            match select {
+                SelectResult::WsCommand(None) => {
+                    // Handle was probably dropped, closeout
+                    ws.close().ok();
                     break;
                 }
+                SelectResult::WsCommand(Some(cmd)) => {
+                    tracing::debug!("Processing WebSocket command: {:?}", cmd);
+                    match cmd {
+                        WsCommand::Send(msg) => {
+                            tracing::debug!("Sending message to WebSocket");
+                            let result = match msg {
+                                WsMessage::Text(text) => ws.send_with_str(&text),
+                                WsMessage::Binary(data) => ws.send_with_u8_array(&data),
+                            };
+
+                            if let Err(e) = result {
+                                tracing::error!("Failed to send message to WebSocket: {:?}", e);
+                                // Could send error back through channel if needed
+                                web_sys::console::error_1(&format!("Send error: {:?}", e).into());
+                            }
+                        }
+                        WsCommand::Close => {
+                            tracing::info!("Closing WebSocket connection");
+                            let _ = ws.close();
+                            break;
+                        }
+                    }
+                }
+                SelectResult::WatchChanged => match rx_open.borrow().as_ref() {
+                    Some(Err(e)) => {
+                        use tracing::debug;
+                        debug!("WebSocket closed. Error received: {:?}", e);
+                        break;
+                    }
+                    _ => {
+                        // I'm still connected, shouldn't be here, but it feels ok to let it slide
+                    }
+                },
             }
-            tracing::debug!("At end of while loop");
+
+            // tracing::debug!("At end of while loop");
         }
     }
 

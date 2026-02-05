@@ -75,14 +75,14 @@ impl WsHandle {
         // The manager stays alive through the spawned task that owns rx_cmd
         let url_clone = url.to_string();
         let (tx_ready, mut rx_ready) = tokio::sync::watch::channel(Ok(()));
-        let rx_ready_clone = rx_ready.clone();
+        // let rx_ready_clone = rx_ready.clone();
         let tx_ready_clone = Arc::new(tx_ready.clone());
         tracing::info!("WsHandle tx_ready before spawn {:?}", &tx_ready);
 
         // let manager = wasm_bindgen_futures::spawn_local(async move {
         // let manager = tokio::task::spawn_local(async move {
-        let manager = wasm_bindgen_futures::spawn_local(async move {
-            let rx_ready = rx_ready_clone;
+        let _manager = wasm_bindgen_futures::spawn_local(async move {
+            // let rx_ready = rx_ready_clone;
 
             let tx_ready = tx_ready_clone;
 
